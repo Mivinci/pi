@@ -12,7 +12,7 @@ import (
 type Foo struct{}
 
 func (Foo) Get(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "This is a GET request")
+	_, _ = fmt.Fprint(w, "This is a GET request")
 }
 
 func main() {

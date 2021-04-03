@@ -30,11 +30,11 @@ func (p prototype) Count() uint64 {
 
 type service struct {
 	name    string
-	refv    reflect.Value
+	value   reflect.Value
 	methods map[string]*prototype
 }
 
-func newSerive() *service {
+func newService() *service {
 	return &service{methods: make(map[string]*prototype)}
 }
 
@@ -44,7 +44,7 @@ func (s *service) register(o interface{}, name string) {
 	if name == "" {
 		name = reflect.Indirect(v).Type().Name()
 	}
-	s.refv = v
+	s.value = v
 	s.name = strings.ToLower(name)
 	for i := 0; i < t.NumMethod(); i++ {
 		method := t.Method(i)
@@ -72,7 +72,7 @@ func (s *service) Call(name string, rw, req reflect.Value) error {
 	if !ok {
 		return ErrMethodNotFound
 	}
-	proto.method.Func.Call([]reflect.Value{s.refv, rw, req})
+	proto.method.Func.Call([]reflect.Value{s.value, rw, req})
 	return nil
 }
 
@@ -90,7 +90,7 @@ func New(opts ...Option) *Server {
 }
 
 func (s *Server) RegisterName(name string, o interface{}) error {
-	svc := newSerive()
+	svc := newService()
 	svc.register(o, name)
 	if _, dup := s.services.LoadOrStore(path.Join(s.options.group, svc.name), svc); dup {
 		return fmt.Errorf("pi: service %s is already registered", svc.name)
@@ -119,23 +119,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), errCode(err))
 		}
 	}
-	if len(s.options.chain) == 0 {
-		endpoint(w, r)
-		return
-	}
-	chain(s.options.chain...)(endpoint)(w, r)
+	chain(endpoint, s.options.chain...)(w, r)
 }
 
 type Middleware func(next http.HandlerFunc) http.HandlerFunc
 
-// chain is the magic. len(ms) cannot be zero.
-func chain(ms ...Middleware) Middleware {
-	return func(next http.HandlerFunc) http.HandlerFunc {
-		for i := len(ms) - 1; i > 0; i-- {
-			next = ms[i](next)
-		}
-		return ms[0](next)
+// chain is the magic.
+func chain(endpoint http.HandlerFunc, middleware ...Middleware) http.HandlerFunc {
+	for i := len(middleware) - 1; i >= 0; i-- {
+		endpoint = middleware[i](endpoint)
 	}
+	return endpoint
 }
 
 func errCode(err error) int {
@@ -147,6 +141,8 @@ func errCode(err error) int {
 
 func RegisterAndRun(addr string, o interface{}, chain ...Middleware) {
 	h := New(Chain(chain...))
-	h.Register(o)
-	http.ListenAndServe(addr, h)
+	if err := h.Register(o); err != nil {
+		log.Fatal("pi:", err)
+	}
+	log.Fatal("pi:", http.ListenAndServe(addr, h))
 }
