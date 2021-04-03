@@ -14,3 +14,10 @@ func main() {
     pi.RegisterAndRun(":8080", new(Foo), middleware.Log(os.Stdout))
 }
 ```
+
+Give it a try.
+
+```bash
+curl -X GET http://localhost:8080/foo
+This is a GET request
+```
